@@ -15,6 +15,10 @@ if (session) {
   cargarCarnets(document.getElementById('carnets'));
 }
 
+function wa(tel) {
+  if (!tel) return ''; // Evita que falle si un registro no tiene teléfono en la BD
+  return String(tel).replace(/\D/g, ''); // Deja solo los números para el link de wa.me
+}
 // Alumnos activos con carnet vencido o que vence dentro del umbral configurado
 async function cargarCarnets(el) {
   try {
