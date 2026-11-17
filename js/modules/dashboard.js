@@ -32,7 +32,7 @@ async function cargarCarnets(el) {
     const filas = data.map((a) => {
       const d = diasEntre(hoy, a.f_venc_carnet);
       const txt = d < 0 ? `Vencido hace ${plural(-d)}` : d === 0 ? 'Vence hoy' : `Vence en ${plural(d)}`;
-      return `<div class="fila"><span>${esc(a.nombre)}<small>${esc(a.categoria?.descripcion)} - Tutor: ${esc(a.tel_tutor)}</small></span>
+      return `<div class="fila"><span>${esc(a.nombre)}<small>${esc(a.categoria?.descripcion)} - Tutor: ${esc(a.tel_tutor)} <a href="https://wa.me/${wa(a.tel_tutor)}" target="_blank" rel="noopener">WhatsApp</a></small></span>
         <span class="estado${d >= 0 ? ' pronto' : ''}">${txt}</span></div>`;
     }).join('');
     el.innerHTML = `<div class="alerta"><h2>${data.length} carnet${data.length === 1 ? '' : 's'} de salud vencido${data.length === 1 ? '' : 's'} o por vencer</h2>
