@@ -44,7 +44,7 @@ async function iniciar(session) {
 
   const [cfg, c] = await Promise.all([
     supabase.from('configuracion').select('dias_alerta_carnet').single(),
-    supabase.from('categoria').select('id,descripcion').order('descripcion'),
+    supabase.from('categoria').select('id,descripcion,cupo').order('descripcion'),
   ]);
   if (!cfg.error) dias = cfg.data.dias_alerta_carnet;
   cats = c.data || [];
@@ -115,7 +115,13 @@ async function iniciar(session) {
       rec_medica: txt('rec_medica'), asistencia_med: txt('asistencia_med'), permite_imagenes: fd.get('permite_imagenes') !== null, descuento: num('descuento') };
     const falla = (t) => { err.textContent = t; err.hidden = false; btn.disabled = false; };
     btn.disabled = true; err.hidden = true;
-
+    // RN-01: avisar si la categoría ya está completa
+    const cat = cats.find((k) => k.id === datos.categoria_id);
+    const ocupados = alumnos.filter((x) => x.estado && x.categoria_id === datos.categoria_id && x.id !== editando?.id).length;
+    if ((!editando || editando.categoria_id !== datos.categoria_id) && cat && ocupados >= cat.cupo
+        && !confirm(`La categoría ${cat.descripcion} está completa (${ocupados} de ${cat.cupo}). ¿Cargarlo igual?`)) {
+      btn.disabled = false; return;
+    }
     let nueva = null;
     const foto = fd.get('foto');
     if (foto && foto.size) {
@@ -129,7 +135,9 @@ async function iniciar(session) {
     }
     const { error } = editando
       ? await supabase.from('alumno').update(datos).eq('id', editando.id)
-      : await supabase.from('alumno').insert(datos);
+      : promoviendo
+        ? await supabase.rpc('promover_aspirante', { p_espera_id: promoviendo, p_alumno: datos })
+        : await supabase.from('alumno').insert(datos);
     if (error) {
       console.error(error);
       if (nueva) supabase.storage.from(BUCKET).remove([nueva]);   // no dejar archivos huérfanos
@@ -167,5 +175,14 @@ async function iniciar(session) {
     const a = alumnos.find((x) => x.id === Number(b.dataset.id));
     if (b.dataset.a === 'editar') abrir(a); else if (b.dataset.a === 'ficha') verFicha(a.foto_ficha_med); else darDeBajaOReactivar(a);
   });
-  cargar();
+    // Promover: alumnos.html?promover=ID abre el formulario con los datos del aspirante
+  let promoviendo = null;
+  dlg.addEventListener('close', () => { promoviendo = null; if (location.search) history.replaceState(null, '', 'alumnos.html'); });
+  const idPromo = Number(new URLSearchParams(location.search).get('promover'));
+  await cargar();
+  if (idPromo) {
+    const { data: asp } = await supabase.from('alumno_en_espera').select('*').eq('id', idPromo).maybeSingle();
+    if (asp) { abrir({ nombre: asp.nombre, tel_tutor: asp.tel_tutor, categoria_id: asp.categoria_id }); promoviendo = asp.id; }
+    else avisar('Ese aspirante ya no está en la lista de espera.');
+  }
 }
