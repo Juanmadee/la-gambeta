@@ -1,6 +1,7 @@
 import { supabase } from '../core/supabase.js';
 import { requireSession } from '../core/auth.js';
 import { montarLayout } from '../core/layout.js';
+import { esc } from '../core/util.js';
 
 const session = await requireSession();
 if (session) {
@@ -18,6 +19,16 @@ if (session) {
         <input id="cumple" type="number" min="1" step="1"></label>
       <p class="ayuda">Se usa al cargar un cumpleaños si no escribís un monto. Dejalo vacío para pedirlo siempre.</p>
       <p id="msg" role="status"></p><button class="btn" id="guardar">Guardar cambios</button>
+    </form>
+    <h2 class="mt">Cambiar contraseña</h2>
+    <form id="form-clave" class="form-simple">
+      <input type="email" autocomplete="username" value="${esc(session.user.email)}" hidden>
+      <label>Contraseña actual<input id="clave-actual" type="password" autocomplete="current-password" required></label>
+      <label>Nueva contraseña<input id="clave-nueva" type="password" autocomplete="new-password" minlength="8" required></label>
+      <label>Repetir la nueva contraseña<input id="clave-repetir" type="password" autocomplete="new-password" minlength="8" required></label>
+      <label class="check"><input type="checkbox" id="clave-ver"> Mostrar contraseñas</label>
+      <p class="ayuda">Mínimo 8 caracteres. Al cambiarla se cierra la sesión en los demás dispositivos.</p>
+      <p id="msg-clave" role="status"></p><button class="btn" id="cambiar">Cambiar contraseña</button>
     </form>`;
   const dias = main.querySelector('#dias'), cuota = main.querySelector('#cuota'), cumple = main.querySelector('#cumple');
   const msg = main.querySelector('#msg'), btn = main.querySelector('#guardar');
@@ -39,5 +50,41 @@ if (session) {
     btn.disabled = false;
     if (e2) { console.error(e2); decir('No se pudo guardar. Revisá los valores (días entre 1 y 365).', false); }
     else decir('Cambios guardados.', true);
+  });
+
+  // ---------- Cambiar contraseña ----------
+  const q = (id) => main.querySelector('#' + id);
+  const decirClave = (t, ok) => { q('msg-clave').textContent = t; q('msg-clave').className = ok ? 'msg-ok' : 'error'; };
+  const CAMPOS = ['clave-actual', 'clave-nueva', 'clave-repetir'];
+  q('clave-ver').addEventListener('change', (e) => CAMPOS.forEach((id) => { q(id).type = e.target.checked ? 'text' : 'password'; }));
+
+  const errorClave = (e) => {
+    const t = `${e.code ?? ''} ${e.message ?? ''}`.toLowerCase();
+    if (t.includes('same_password') || t.includes('different from the old')) return 'La nueva contraseña tiene que ser distinta de la actual.';
+    if (t.includes('weak') || t.includes('at least')) return 'La contraseña es muy débil. Usá más caracteres, mezclando letras, números y símbolos.';
+    return 'No se pudo cambiar la contraseña. Intentá de nuevo.';
+  };
+
+  q('form-clave').addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const actual = q('clave-actual').value, nueva = q('clave-nueva').value, otra = q('clave-repetir').value, b = q('cambiar');
+    if (nueva.length < 8) return decirClave('La nueva contraseña debe tener al menos 8 caracteres.', false);
+    if (nueva !== otra) return decirClave('Las contraseñas nuevas no coinciden.', false);
+    if (nueva === actual) return decirClave('La nueva contraseña tiene que ser distinta de la actual.', false);
+    b.disabled = true; decirClave('', true);
+    // Re-autenticación: confirma que quien la cambia conoce la actual (y renueva la sesión)
+    const { error: eAuth } = await supabase.auth.signInWithPassword({ email: session.user.email, password: actual });
+    if (eAuth) {
+      console.error(eAuth); b.disabled = false;
+      return decirClave(eAuth.status === 400 ? 'La contraseña actual no es correcta.' : 'No se pudo verificar la contraseña actual. Revisá tu conexión e intentá de nuevo.', false);
+    }
+    const { error: eUp } = await supabase.auth.updateUser({ password: nueva });
+    b.disabled = false;
+    if (eUp) { console.error(eUp); return decirClave(errorClave(eUp), false); }
+    // Cierra las sesiones de otros dispositivos (esta sigue abierta)
+    const { error: eOut } = await supabase.auth.signOut({ scope: 'others' });
+    if (eOut) console.error(eOut);
+    CAMPOS.forEach((id) => { q(id).value = ''; });
+    decirClave('Contraseña cambiada correctamente.', true);
   });
 }
