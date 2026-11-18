@@ -4,3 +4,5 @@ export const sumarDias = (f, n) => new Date(Date.parse(f) + n * 864e5).toISOStri
 export const diasEntre = (a, b) => Math.round((Date.parse(b) - Date.parse(a)) / 864e5);
 // Escapa texto de la BD antes de meterlo en innerHTML (evita XSS)
 export const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+// Moroso (RN-07): cuota impaga cuando ya pasó el día 10 del mes de su vencimiento. hoy y fecha_vencimiento: 'YYYY-MM-DD'
+export const esMoroso = (cuota, hoy) => !cuota.pagada && hoy > cuota.fecha_vencimiento.slice(0, 7) + '-10';

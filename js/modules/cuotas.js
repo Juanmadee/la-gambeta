@@ -1,7 +1,7 @@
 import { supabase } from '../core/supabase.js';
 import { requireSession } from '../core/auth.js';
 import { montarLayout } from '../core/layout.js';
-import { hoyUY, esc } from '../core/util.js';
+import { hoyUY, esc, esMoroso } from '../core/util.js';
 
 const fmt = (f) => f.split('-').reverse().join('/');
 const pesos = (n) => '$ ' + Number(n).toLocaleString('es-UY');
@@ -85,7 +85,7 @@ async function iniciar(session) {
       : '';
     tbody.innerHTML = cuotas.length ? cuotas.map((c) => {
       const badge = c.pagada ? '<span class="b-ok">Pagada</span>'
-        : c.fecha_vencimiento < hoy ? '<span class="b-venc">Vencida</span>' : '<span class="b-pronto">Pendiente</span>';
+        : esMoroso(c, hoy) ? '<span class="b-venc">Morosa</span>' : '<span class="b-pronto">Pendiente</span>';
       return `<tr><td><input type="checkbox" data-id="${c.id}"${c.pagada ? ' disabled' : ''} aria-label="Seleccionar cuota de ${esc(c.alumno.nombre)}"></td>
         <td>${esc(c.alumno.nombre)}</td><td>${fmt(c.fecha_vencimiento)}</td><td>${pesos(c.monto)}</td>
         <td>${pesos(c.monto_total_descuento)}${c.monto_total_descuento < c.monto ? '<small>Con descuento</small>' : ''}</td><td>${badge}</td></tr>`;
