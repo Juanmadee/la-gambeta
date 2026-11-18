@@ -24,7 +24,8 @@ async function iniciar(session) {
     <div class="cabecera"><h1>Generar cuotas</h1></div>
     <p id="aviso" class="error" role="alert" hidden></p>
     <form id="form" class="form-simple">
-      <label>Monto base de la cuota ($)<input id="monto" type="number" min="1" step="1" required></label>
+      <label>Monto base de la cuota ($)<input id="monto" type="number" min="1" step="1"></label>
+      <p class="ayuda" id="ayuda-monto"></p>
       <label>Fecha de vencimiento (opcional)<input id="venc" type="date"></label>
       <p class="ayuda" id="ayuda"></p>
       <p id="msg-gen" role="status"></p>
@@ -62,6 +63,15 @@ async function iniciar(session) {
     $('ayuda').textContent = `Si la dejás vacía, vence el ${fmt(vd)}.`;
     $('mes').value = vd.slice(0, 7);
   }
+
+  // Monto por defecto (Configuración): se usa si se deja vacío el monto
+  const { data: cfg, error: ecfg } = await supabase.from('configuracion').select('monto_cuota_defecto').eq('id', 1).single();
+  if (ecfg) console.error(ecfg);
+  const montoDefecto = cfg?.monto_cuota_defecto ?? null;
+  $('ayuda-monto').textContent = montoDefecto
+    ? `Si lo dejás vacío se usa ${pesos(montoDefecto)} (monto por defecto de Configuración).`
+    : 'No hay monto por defecto configurado: ingresalo acá o definilo en Configuración.';
+  if (montoDefecto) $('monto').placeholder = String(montoDefecto);
 
   // ---------- Listado del período ----------
   async function cargarPeriodo() {
@@ -135,7 +145,9 @@ async function iniciar(session) {
     e.preventDefault();
     const msg = $('msg-gen'), btn = $('generar');
     decir(msg, '');
-    const monto = Number($('monto').value);
+    const montoTxt = $('monto').value.trim();
+    if (!montoTxt && !montoDefecto) return decir(msg, 'Ingresá un monto o definí un monto por defecto en Configuración.', false);
+    const monto = montoTxt ? Number(montoTxt) : montoDefecto;
     if (!Number.isInteger(monto) || monto < 1) return decir(msg, 'Ingresá un monto entero mayor a 0.', false);
     const venc = $('venc').value || vencDefecto;
     if (!venc) return decir(msg, 'Elegí una fecha de vencimiento.', false);
@@ -162,7 +174,7 @@ async function iniciar(session) {
       return decir(msg, `Todos los alumnos activos ya tienen cuota con vencimiento el ${fmt(venc)}. No se generó nada.`, false);
     }
     if (ex.data.length) {
-      let t = `Ya hay ${plural(ex.data.length, 'cuota', 'cuotas')} con vencimiento en ${mesTxt(ym)}.\n\nSe crearán ${plural(faltan.length, 'cuota', 'cuotas')} con vencimiento el ${fmt(venc)}, solo para los alumnos activos que no la tienen.`;
+      let t = `Ya hay ${plural(ex.data.length, 'cuota', 'cuotas')} con vencimiento en ${mesTxt(ym)}.\n\nSe crearán ${plural(faltan.length, 'cuota', 'cuotas')} de ${pesos(monto)} con vencimiento el ${fmt(venc)}, solo para los alumnos activos que no la tienen.`;
       if (duplicarian) t += `\n\nOjo: ${plural(duplicarian, 'alumno ya tiene', 'alumnos ya tienen')} una cuota de ese mes con otro vencimiento y quedaría${duplicarian === 1 ? '' : 'n'} con dos.`;
       if (!confirm(t + '\n\n¿Continuar?')) { btn.disabled = false; return; }
     }
@@ -170,7 +182,7 @@ async function iniciar(session) {
     const { data, error } = await supabase.rpc('generar_cuotas', { p_monto: monto, p_fecha_vencimiento: venc });
     btn.disabled = false;
     if (error) { console.error(error); return decir(msg, 'No se pudieron generar las cuotas. No se creó ninguna; revisá los datos e intentá de nuevo.', false); }
-    decir(msg, `Se generaron ${plural(data, 'cuota', 'cuotas')} con vencimiento el ${fmt(venc)}.`, true);
+    decir(msg, `Se generaron ${plural(data, 'cuota', 'cuotas')} de ${pesos(monto)} con vencimiento el ${fmt(venc)}.`, true);
     $('mes').value = ym;
     decir($('msg-lista'), '');
     cargarPeriodo();
